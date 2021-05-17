@@ -9,15 +9,27 @@ def get_column_postion(column, columns_definitions):
         if(column==position_name):
             return column_definition.text
 
-def get_service_definition(seat_definition_ref, service_definition_list):
-    for service in service_definition_list:
-        service_definition_id = service.get('ServiceDefinitionID') 
-        print('###')
-        print(service_definition_id)
-        print('###ref')
-        print(seat_definition_ref)
-        if(seat_definition_ref==service_definition_id):
-            print("equals")
+def get_prices(seat_offer_id, la_carte_offer_list):
+    for offer in la_carte_offer_list:
+        offer_id = offer.get('OfferItemID') 
+
+        if(seat_offer_id==offer_id):
+            for simple_currency_price in offer.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}SimpleCurrencyPrice'):
+                fees = {
+                    'price': simple_currency_price.text,
+                    'currency': simple_currency_price.get('Code') ,
+                }
+                
+                return fees
+
+def get_seat_definition(seat_definition_id, seat_definition_list):
+
+    for seat_definition in seat_definition_list:
+        definition_id = seat_definition.get('SeatDefinitionID') 
+        
+        if(seat_definition_id==definition_id): 
+            description = seat_definition.find('.//{http://www.iata.org/IATA/EDIST/2017.2}Text')
+            return description.text
 
 filename = sys.argv[-1]
 
@@ -32,33 +44,55 @@ iata_address = '{http://www.iata.org/IATA/EDIST/2017.2}SeatAvailabilityRS'
 open_travel_address = '{http://schemas.xmlsoap.org/soap/envelope/}Envelope'
 
 
-if(root.tag == iata_address):
-    service_destionation_list = root.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}ServiceDefinition')    
+if(root.tag == iata_address):    
+    offer_list = root.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}ALaCarteOfferItem')
+    service_definition_list = root.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}SeatDefinition')
 
     for cabinLayout in root.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}CabinLayout'):
 
         column_postions = cabinLayout.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}Columns')
 
+        
+
         for row in root.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}Row'):
+            seat_offer_id = row.find('.//{http://www.iata.org/IATA/EDIST/2017.2}OfferItemRefs')
+            
+
+            if(seat_offer_id != None):
+                    seat_offer_id = seat_offer_id.text
+                    price = get_prices(seat_offer_id, offer_list)
+                     
     
             for row_number in row.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}Number'):
                 row_number = row_number.text
-        
-            for seat in row.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}Seat'):
-                seat_column_uncoverted = seat.find('.//{http://www.iata.org/IATA/EDIST/2017.2}Column').text            
-                seat_type = get_column_postion(seat_column_uncoverted,column_postions)
-                seat_definition_ref = seat.find('.//{http://www.iata.org/IATA/EDIST/2017.2}SeatDefinitionRef').text
             
-  
-            row_info = {
-                'row_number': row_number,
-                'seat_type': seat_type,
-                'seat_definition_ref': seat_definition_ref
-            }
+        
+            for seat_list in row.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}Seat'):
+                seat_column_uncoverted = seat_list.find('.//{http://www.iata.org/IATA/EDIST/2017.2}Column').text            
+                seat_type = get_column_postion(seat_column_uncoverted,column_postions)
+                
+                for seat in seat_list.findall('.//{http://www.iata.org/IATA/EDIST/2017.2}SeatDefinitionRef'):
+                    seat_definition_ref = seat.text
+                    description = get_seat_definition(seat_definition_ref, service_definition_list) 
+                                 
 
-            dictionary_copy = row_info.copy()
+                    row_info = {
+                        'row_number': row_number,
+                        'seat_definition_ref': seat_definition_ref,
+                        'column': seat_column_uncoverted,
+                        'description': description
+                    }
 
-            alist.append(dictionary_copy)
+                    if(seat_type != None):
+                        row_info['seat_type'] = seat_type
+
+                    if(seat_offer_id != None):
+                        row_info['fees'] = price
+
+
+                    dictionary_copy = row_info.copy()
+
+                    alist.append(dictionary_copy)
     
 
 if(root.tag == open_travel_address):
